@@ -1,0 +1,275 @@
+#These lines are here to import the necessary modules
+import matplotlib.pyplot as plt
+import matplotlib as mp
+import matplotlib.gridspec as gridspec
+from matplotlib.gridspec import GridSpec
+from matplotlib import cm
+import numpy as np
+import math
+#im = plt.imread('logo.png')
+import pandas as pd  
+from statsmodels.stats.multicomp import pairwise_tukeyhsd
+#mp.use('Agg')
+
+
+pd.set_option("display.max_rows", None, "display.max_columns", None)
+def Collect_data():
+  global Sample_name
+  global Peak_name
+  global Primary
+  global Channel
+  global PeakHeight
+  global PeakArea
+  Columns = []
+  Titles = input('\nCopy/Paste all data from Compass.\nPress ENTER twice when done.\n\n')
+  Columns = [x.strip() for x in Titles.split('	')]
+  index_name = Columns.index('Name')
+  index_sample = Columns.index('Sample')
+  index_primary = Columns.index('Primary')
+  index_PeakHeight = Columns.index('Height')
+  index_PeakArea = Columns.index('Area')
+  index_Baseline = Columns.index('Baseline')
+  index_S_N = Columns.index('S/N')
+  index_Channel = Columns.index('Channel')
+  Columns = [[x] for x in Columns]
+  Sample = []
+  Primary = []
+  PeakHeight = []
+  S_N = []
+  Baseline = []
+  Sample_name = []
+  Peak_name = []
+  PeakArea = []
+  Channel = []
+  while True:
+      candidates = input('\nData Peak ' + str(1 + len(PeakArea)) + ': ')
+      if not candidates:
+          break
+      try:
+          Columns = [x.strip() for x in candidates.split('	')]
+          Columns[index_primary] = Columns[index_primary].replace(',','.')
+          Columns[index_PeakHeight] = Columns[index_PeakHeight].replace(',','.')
+          Columns[index_PeakArea] = Columns[index_PeakArea].replace(',','.')
+          Columns[index_S_N] = Columns[index_S_N].replace(',','.')
+          Columns[index_Baseline] = Columns[index_Baseline].replace(',','.')
+          PeakHeight.append(float(Columns[index_PeakHeight]))
+          Baseline.append(float(Columns[index_Baseline]))
+          S_N.append(float(Columns[index_S_N]))
+          Sample_name.append(Columns[index_sample])
+          Peak_name.append(Columns[index_name])
+          PeakArea.append(float(Columns[index_PeakArea]))
+          Channel.append(Columns[index_Channel])
+      except ValueError:
+          print('Hum, sorry, could not handle that input')
+
+
+
+Sample_Name_List = []
+Peak_Name_List = []
+PeakArea_List = []
+StDev_Peak_List = []
+Channel_List = []
+Collect_data()
+new_ref_name = str(input("How do you want to rename the reference ?\n"))
+p_value_threshold = input("What p-value threshold ? (default threshold is 0.05)\n")
+Title = input("Figure title :\n")
+
+
+if p_value_threshold == "":
+  p_value_threshold = float(0.05)
+else:
+  p_value_threshold = float(p_value_threshold)
+
+
+
+Sample_Name_List.append(Sample_name)
+Peak_Name_List.append(Peak_name)
+PeakArea_List.append(PeakArea)
+StDev_Peak_List.append(PeakArea)
+Channel_List.append(Channel)
+
+Sample_Name_List = [item for items in Sample_Name_List for item in items]
+Peak_Name_List = [item for items in Peak_Name_List for item in items]
+PeakArea_List = [item for items in PeakArea_List for item in items]
+StDev_Peak_List = [item for items in StDev_Peak_List for item in items]
+Channel_List = [item for items in Channel_List for item in items]
+
+lst = [Sample_Name_List, Peak_Name_List, PeakArea_List, StDev_Peak_List, Channel]
+data = {'Sample_Name': Sample_Name_List, 'Peak_Name': Peak_Name_List, 'Peak_Area': PeakArea_List, 'StDev_Peak': StDev_Peak_List, 'Channel': Channel_List} 
+df = pd.DataFrame(data) 
+
+
+peak_name_super_list = sorted(set(df['Peak_Name'].tolist()))
+df_target = [df.loc[df["Peak_Name"] == i] for i in peak_name_super_list]
+
+
+tukey = []
+df_tukey = []
+
+#significance = input("what threshold for p-value ? \n\n")
+
+for i in range(len(peak_name_super_list)):
+  # perform Tukey's test
+  tukey.append(pairwise_tukeyhsd(endog=df_target[i]['Peak_Area'],
+  groups=df_target[i]['Sample_Name'],
+  alpha=p_value_threshold))
+  df_tukey.append(pd.DataFrame(data=tukey[i]._results_table.data[1:], columns=tukey[i]._results_table.data[0]))
+  print('\n\n')   
+
+    
+
+for i in range(len(peak_name_super_list)):
+    df_target[i] = df_target[i].groupby(['Sample_Name', 'Peak_Name', 'Channel'], sort=False, as_index=False).agg({'Peak_Area': ['mean', 'std', 'count']})
+
+
+def convert(list): 
+  res = int("".join(map(str, list))) 
+  return res 
+idx = []
+for x in range(len(peak_name_super_list)):
+  idx_V = df_target[x][df_target[x]["Sample_Name"]=="Reference"].index.values.tolist()
+  idx_V = convert(idx_V)
+  idx.append(idx_V)
+df_target_norm = df_target
+for x in range(len(peak_name_super_list)):
+  df_target_norm[x].iloc[:, 3:5] = 100 * df_target[x].iloc[:, 3:5] / df_target[x].iloc[idx[x],3]
+total_rows = []
+total_rows = [df_target_norm[i].shape[0] for i in range(len(peak_name_super_list))]
+Tot = len(peak_name_super_list)
+Cols = 1
+Rows = Tot // Cols 
+Rows += Tot % Cols
+Position = range(1,Tot + 1)
+color=['lavender', 'pink', 'aquamarine', 'lightblue', 'beige', 'lightgreen', 'silver', 'wheat', 'chartreuse']
+label_color=['mediumpurple', 'mediumvioletred', 'lightseagreen', 'deepskyblue', 'tan', 'limegreen', 'gray', 'goldenrod', 'yellowgreen']
+
+Tickfont = 8
+Axisfont = 8
+Titlefont = 20
+
+Sample_list = df_target_norm[0]["Sample_Name"].tolist()
+Letters = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n']
+for i in range(len(peak_name_super_list)):
+    Sample_list = df_target_norm[i]["Sample_Name"].tolist()
+    Letter_for_table = [[] for _ in Sample_list]
+    Letter_for_table[0].append(Letters[0])
+    l=0
+    True_or_false = []
+    df_target_norm[i]["Letter"] = str(Letters[l])
+    z=0
+    Samples_déjà_passés = []
+    Samples_déjà_passés.append(Sample_list[0])
+    for k in Sample_list:
+        if k == Sample_list[0]:
+            continue
+        List_should_I_raise_letter = []
+        Sample_FALSE = []
+        Letter_of_the_false_ones = []
+        df_tukey_new = df_tukey[i][(df_tukey[i]["group1"] == k) | (df_tukey[i]["group2"] == k)]
+        The_other_samples = []
+        Reject_list = []
+        for Sample in range(len(Sample_list)-1):
+            The_other_samples.append(df_tukey_new.iloc[Sample, 0:2].tolist())
+            The_other_samples[Sample].remove(str(k))
+            Reject_list.append(df_tukey_new.iloc[Sample, 6:7].tolist())
+        The_other_samples = [item for sublist in The_other_samples for item in sublist]
+        Reject_list = [item for sublist in Reject_list for item in sublist]
+        if z != 0:
+            Samples_déjà_passés.append(Sample_list[z])
+        for h in Samples_déjà_passés:
+            idx = The_other_samples.index(str(h))
+            List_should_I_raise_letter.append(Reject_list[idx]) 
+        if List_should_I_raise_letter.count(False) > 0:
+            idx_FALSE = [i for i, n in enumerate(List_should_I_raise_letter) if str(n) == "False"]
+            for t in idx_FALSE:
+                Sample_FALSE.append(Samples_déjà_passés[t])
+                lettre_à_inserer = ''.join(Letter_for_table[t])
+                if lettre_à_inserer not in Letter_of_the_false_ones:
+                    if Letter_of_the_false_ones == []:
+                        Letter_of_the_false_ones.append(lettre_à_inserer)
+                    else:
+                        Letter_of_the_false_ones.append("" + str(lettre_à_inserer))
+            lettre_à_inserer = ''.join(Letter_of_the_false_ones)
+            Letter_for_table[z+1].append(str(lettre_à_inserer))
+        else:
+            l+=1
+            Letter_for_table[z+1].append(Letters[l])
+        z+=1
+    df_target_norm[i]["Letter"] = Letter_for_table
+    print("\nTarget : ", peak_name_super_list[i])
+    print(df_target_norm[i])
+    print("\n\nI determined the letters based on a Tukey's test. Please double-check : \n\n", df_tukey[i])
+    print('\n\n\n\n\n')
+   
+
+fig2, ax = plt.subplots(figsize=(9.6,4.5))
+
+
+
+x = np.arange(len(peak_name_super_list)).tolist()  # the label locations
+width = 0.8/len(Sample_list)  # the width of the bars
+x_shift = np.linspace(-1, -1*(1/(len(Sample_list)-1)), len(Sample_list)).tolist()
+labels = []
+x_shifts = []
+vertical_bar = []
+n_list = []
+for i in range(Tot):
+    indice_of_ref = df_target_norm[i]["Sample_Name"].tolist().index("Reference")
+    if new_ref_name != "":
+      df_target_norm[i].iloc[indice_of_ref,0] = new_ref_name
+    else:
+      new_ref_name = df_target_norm[i].iloc[indice_of_ref,0]
+    st_devs = df_target_norm[i]['Peak_Area']['std'].tolist()
+    max_x = len(st_devs)
+    shifted_x = []
+    for j in x_shift:
+        shifted_x.append(x[i]+j)
+    vertical_bar.append([min(shifted_x), max(shifted_x)])
+    y_test = df_target_norm[i]['Peak_Area']['mean'].tolist()
+    error_bars = df_target_norm[i]['Peak_Area']['std'].tolist()
+    rects = ax.bar(shifted_x, y_test, width, label=str(peak_name_super_list[i]), yerr=error_bars, color=color[i], error_kw=dict(lw=1, capsize=5, capthick=1))
+    label = df_target_norm[i]['Sample_Name'].tolist()
+    for m,n in zip(label, shifted_x):
+        labels.append(m)
+        x_shifts.append(n)
+    label_letter = df_target_norm[i]["Letter"].tolist()
+    label_letter = [item for sublist in label_letter for item in sublist]
+    ax.bar_label(rects, label_letter, padding=3, fontsize=12, family='serif', color=label_color[i])
+    for k in range(len(Sample_list)):
+      n_list.append(df_target_norm[i]['Peak_Area']['count'][k].tolist())
+
+
+ylim = ax.get_ylim()
+ax.set_ylim(0, ylim[1]*1.05)
+
+mean_vert_bar = []
+for i in range(len(vertical_bar)):
+  if i == 0:
+    continue
+  mean_vert_bar.append(vertical_bar[i-1][1])
+#for i in mean_vert_bar:
+  #ax.vlines(i + (5*width/6), 0, 200, linestyles='dotted')
+
+n_list = list(dict.fromkeys(n_list))
+if len(n_list) == 1:
+    n=n_list[0]
+    ax.plot([], [], ' ', label="n = " + str(n))
+else:
+    n=str("\n\nSample groups of different size\n\n")
+    print(n)
+max_x = max(x)
+ax.set_title(Title, fontsize=Titlefont, loc='center')
+ax.plot([], [], ' ', label="p-value < " + str(p_value_threshold))
+#x_shifts = [i - (width/2) for i in x_shifts]
+ax.set_xticks(x_shifts)
+ax.set_xticklabels(labels, fontsize=12, rotation=90)
+ax.set_ylabel('Peak Area\n$\\regular_{(\%\ of\ Reference)}$', fontsize=12)
+ax.tick_params(axis="y", labelsize=Tickfont)
+ax.legend(loc=1, fontsize=8)  
+fig2.tight_layout(pad=1)
+fig2.savefig('Graph.png')
+fig2.savefig("Graph.svg", format = 'svg', dpi=1200)
+print("\nYour Graph is ready.")
+print("\nHave a great day!")
+plt.show()
+
